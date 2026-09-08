@@ -6,6 +6,7 @@ import { useRequireAuth } from "@/lib/hooks/useAuth";
 import { useKitDetail } from "@/lib/hooks/useKit";
 import { usePracticeSession, useRecordAttempt } from "@/lib/hooks/usePractice";
 import { Button, Card, Spinner } from "@/components/ui";
+import { WeakSpotsPanel } from "@/components/practice/WeakSpotsPanel";
 
 const CONFIDENCE_LABELS = ["No idea", "Shaky", "OK", "Good", "Nailed it"];
 
@@ -82,22 +83,25 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
       </div>
 
       {done ? (
-        <Card className="space-y-3 text-center">
-          <h2 className="text-lg font-semibold">Session complete</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            You went through {order.length} card(s). The next session will lead with whatever you felt least
-            confident about.
-          </p>
-          <Button
-            onClick={() => {
-              setIndex(0);
-              setRevealed(false);
-              sessionQuery.refetch();
-            }}
-          >
-            Practise again
-          </Button>
-        </Card>
+        <div className="space-y-4">
+          <Card className="space-y-3 text-center">
+            <h2 className="text-lg font-semibold">Session complete</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              You went through {order.length} card(s). The next session will lead with whatever you felt least
+              confident about.
+            </p>
+            <Button
+              onClick={() => {
+                setIndex(0);
+                setRevealed(false);
+                sessionQuery.refetch();
+              }}
+            >
+              Practise again
+            </Button>
+          </Card>
+          <WeakSpotsPanel kitId={id} />
+        </div>
       ) : (
         <Card className="space-y-4">
           <p className="text-xs uppercase tracking-wide text-slate-400">

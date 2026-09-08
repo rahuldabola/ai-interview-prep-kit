@@ -19,6 +19,7 @@ import {
 import { computeDedupeHash, addFlashcard, addQuestion, deleteFlashcard, deleteQuestion, editCompanyBrief, editFlashcard, editQuestion, editRequirement, reorderQuestions } from "../services/kitService.js";
 import { regenerateSection, startGeneration } from "../services/generationService.js";
 import { validateKit } from "../validation/kitSchema.js";
+import { computeWeakSpots } from "../pipeline/weakSpots.js";
 import type { Kit } from "../pipeline/types.js";
 
 export const kitsRouter = Router();
@@ -183,5 +184,21 @@ kitsRouter.get(
       totalCards: kit.flashcards.length,
       latestConfidence: Object.fromEntries(latestConfidence),
     });
+  })
+);
+
+kitsRouter.get(
+  "/:id/weak-spots",
+  asyncHandler(async (req, res) => {
+    const doc = await loadOwnedKit(req.userId!, req.params.id);
+    if (!doc.kit) throw new HttpError(409, "KIT_NOT_READY", "This kit has not finished generating yet");
+    const kit = doc.kit as Kit;
+
+    const latestConfidence = new Map<string, number>();
+    for (const attempt of doc.practiceAttempts) {
+      latestConfidence.set(attempt.flashcard_id, attempt.confidence);
+    }
+
+    res.json({ weak_spots: computeWeakSpots(kit, latestConfidence) });
   })
 );
