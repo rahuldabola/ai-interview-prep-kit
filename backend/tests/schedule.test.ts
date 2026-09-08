@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSchedule } from "../src/pipeline/schedule.js";
+import { buildSchedule, pruneScheduleReferences } from "../src/pipeline/schedule.js";
 import type { Question, Requirement } from "../src/pipeline/types.js";
 
 function req(id: string, priority: "must" | "nice"): Requirement {
@@ -55,5 +55,30 @@ describe("buildSchedule", () => {
     for (const day of schedule.days) {
       expect(Number.isInteger(day.minutes)).toBe(true);
     }
+  });
+});
+
+describe("pruneScheduleReferences", () => {
+  it("drops question_ids for questions that no longer exist and recomputes minutes", () => {
+    const requirements = [req("r1", "must")];
+    const questions = [q("q1", ["r1"], 2), q("q2", ["r1"], 3)];
+    const schedule = buildSchedule(requirements, questions, 1);
+    expect(schedule.days[0]!.question_ids.sort()).toEqual(["q1", "q2"]);
+    expect(schedule.days[0]!.minutes).toBe(25 + 40);
+
+    // q2 was removed (e.g. a category regeneration dropped it) — the schedule must not
+    // keep pointing at it, and the remaining day's minutes must reflect only what's left.
+    const pruned = pruneScheduleReferences(schedule, [questions[0]!]);
+    expect(pruned.days[0]!.question_ids).toEqual(["q1"]);
+    expect(pruned.days[0]!.minutes).toBe(25);
+  });
+
+  it("never removes a day even if all of its questions are gone", () => {
+    const requirements = [req("r1", "must")];
+    const questions = [q("q1", ["r1"], 1)];
+    const schedule = buildSchedule(requirements, questions, 3);
+    const pruned = pruneScheduleReferences(schedule, []);
+    expect(pruned.days).toHaveLength(3);
+    expect(pruned.days.every((d) => d.question_ids.length === 0 && d.minutes === 0)).toBe(true);
   });
 });

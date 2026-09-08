@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { HttpError } from "../middleware/errorHandler.js";
 import { checkCoverage } from "../pipeline/coverageCheck.js";
 import { makeIdCounter, nextCounterFrom } from "../pipeline/ids.js";
+import { pruneScheduleReferences } from "../pipeline/schedule.js";
 import type { EditableMeta, Flashcard, Kit, Question, QuestionCategory, Requirement } from "../pipeline/types.js";
 
 export function computeDedupeHash(userId: string, jd: string, companyUrl: string): string {
@@ -70,7 +71,7 @@ export function deleteQuestion(kit: Kit, id: string): void {
   const before = kit.questions.length;
   kit.questions = kit.questions.filter((q) => q.id !== id);
   if (kit.questions.length === before) throw new HttpError(404, "NOT_FOUND", `Question "${id}" not found`);
-  for (const day of kit.schedule.days) day.question_ids = day.question_ids.filter((qid) => qid !== id);
+  kit.schedule = pruneScheduleReferences(kit.schedule, kit.questions);
   recomputeCoverage(kit);
 }
 

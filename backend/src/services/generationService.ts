@@ -9,7 +9,7 @@ import {
   generateSystemDesignQuestions,
   generateTechnicalQuestions,
 } from "../pipeline/generateQuestions.js";
-import { buildSchedule } from "../pipeline/schedule.js";
+import { buildSchedule, pruneScheduleReferences } from "../pipeline/schedule.js";
 import { mergeCompanyBrief, mergeQuestionCategory } from "../pipeline/mergeRegeneration.js";
 import { nextCounterFrom } from "../pipeline/ids.js";
 import { validateKit } from "../validation/kitSchema.js";
@@ -111,6 +111,9 @@ export async function regenerateSection(
     const fresh = await CATEGORY_GENERATORS[category](kit, makeId);
     const replaceable = kit.questions.filter((q) => q.category === category && q.origin === "generated" && !q.pinned).length;
     kit.questions = mergeQuestionCategory(kit.questions, category, fresh);
+    // Dropped "generated" questions may still have been referenced by the schedule —
+    // reconcile before validating, rather than leaving a dangling question_id.
+    kit.schedule = pruneScheduleReferences(kit.schedule, kit.questions);
     return finalizeRegeneration(kit, replaceable > 0 || fresh.length > 0);
   }
 

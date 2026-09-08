@@ -60,3 +60,26 @@ export function buildSchedule(
 
   return { days_available: days, days: scheduleDays };
 }
+
+/**
+ * Drops schedule references to questions that no longer exist and recomputes each day's
+ * minutes from what remains. Needed whenever questions are removed outside of a full
+ * `buildSchedule` recompute — a category regeneration or a manual delete — so the schedule
+ * never ends up pointing at a question_id that doesn't exist (a structural validation
+ * invariant), without discarding the rest of the day-by-day layout.
+ */
+export function pruneScheduleReferences(
+  schedule: { days_available: number; days: ScheduleDay[] },
+  questions: Question[]
+): { days_available: number; days: ScheduleDay[] } {
+  const validIds = new Set(questions.map((q) => q.id));
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  return {
+    days_available: schedule.days_available,
+    days: schedule.days.map((day) => {
+      const question_ids = day.question_ids.filter((id) => validIds.has(id));
+      const minutes = question_ids.reduce((sum, id) => sum + SCHEDULE.MINUTES_BY_DIFFICULTY[byId.get(id)!.difficulty], 0);
+      return { ...day, question_ids, minutes };
+    }),
+  };
+}
