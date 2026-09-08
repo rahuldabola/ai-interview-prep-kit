@@ -26,4 +26,13 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
+// The dev default keeps `npm run dev` frictionless locally, but it must never reach a
+// deployed environment — a shared, known JWT secret would let anyone forge a session.
+if (env.NODE_ENV === "production" && env.JWT_SECRET === "dev-secret-change-me") {
+  throw new Error("JWT_SECRET must be set to a real secret in production (refusing the dev default).");
+}
+if (env.NODE_ENV === "production" && env.ALLOW_PRIVATE_HOSTS) {
+  throw new Error("ALLOW_PRIVATE_HOSTS must not be true in production (Section 11: reject private/loopback addresses).");
+}
+
 export const corsOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim());
