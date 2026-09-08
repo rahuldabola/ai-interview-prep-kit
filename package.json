@@ -1,0 +1,14 @@
+{
+  "name": "ai-interview-prep-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trao Full-Stack Engineering Assessment — The AI Interview Prep Kit",
+  "scripts": {
+    "evaluate": "npm --prefix backend run evaluate --",
+    "backend:install": "npm --prefix backend install",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:test": "npm --prefix backend test",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev"
+  }
+}
