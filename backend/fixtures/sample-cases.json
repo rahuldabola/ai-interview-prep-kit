@@ -1,0 +1,32 @@
+[
+  {
+    "id": "case-01-normal",
+    "jd": "Senior Backend Engineer\n\nAcme Robotics is looking for a Senior Backend Engineer to join our fleet-management platform team.\n\nRequirements:\n- 5+ years of experience building production Node.js or Go services\n- Required: strong experience with PostgreSQL and schema design\n- You have deep experience with distributed systems and message queues\n- Required: experience mentoring junior engineers and leading design reviews\n- Bonus points for experience with robotics or IoT telemetry pipelines\n- Nice to have: exposure to Kubernetes\n\nYou will design APIs consumed by our fleet of autonomous robots, review PRs, and mentor two junior engineers.",
+    "company_url": "http://localhost:8099/",
+    "days": 5
+  },
+  {
+    "id": "case-02-thin-jd",
+    "jd": "Backend Engineer. Node.js. Remote.",
+    "company_url": "http://localhost:8099/",
+    "days": 3
+  },
+  {
+    "id": "case-03-unreachable-company",
+    "jd": "Frontend Engineer\n\nRequired: 3+ years of React experience. Required: strong CSS skills. Bonus: design systems experience.",
+    "company_url": "http://localhost:8099/does-not-exist-9999/",
+    "days": 7
+  },
+  {
+    "id": "case-04-one-day",
+    "jd": "Staff Data Engineer\n\nRequired: 8+ years with large-scale data pipelines (Spark, Airflow). Required: experience owning on-call for critical data infrastructure. Bonus: experience with dbt.",
+    "company_url": "http://localhost:8099/about",
+    "days": 1
+  },
+  {
+    "id": "case-05-long-schedule",
+    "jd": "Junior Software Engineer\n\nRequired: basic knowledge of JavaScript and Git. Nice to have: any exposure to React.",
+    "company_url": "http://localhost:8099/careers",
+    "days": 45
+  }
+]

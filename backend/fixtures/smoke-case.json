@@ -1,0 +1,8 @@
+[
+  {
+    "id": "smoke-01",
+    "jd": "Senior Backend Engineer\n\nAcme Robotics is looking for a Senior Backend Engineer to join our fleet-management platform team.\n\nRequirements:\n- 5+ years of experience building production Node.js or Go services\n- Required: strong experience with PostgreSQL and schema design\n- You have deep experience with distributed systems and message queues\n- Required: experience mentoring junior engineers and leading design reviews\n- Bonus points for experience with robotics or IoT telemetry pipelines\n- Nice to have: exposure to Kubernetes\n\nYou will design APIs consumed by our fleet of autonomous robots, review PRs, and mentor two junior engineers.",
+    "company_url": "http://localhost:8099/",
+    "days": 5
+  }
+]
