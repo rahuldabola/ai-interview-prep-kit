@@ -6,7 +6,7 @@ interview, and produces a structured prep kit — company brief, role breakdown,
 question bank, flashcards, and a day-by-day schedule — that you can edit, reorder, and
 practise against.
 
-- **Live app:** _TODO: Vercel URL_
+- **Live app:** https://ai-interview-prep-kit-six.vercel.app
 - **Live API:** _TODO: Render URL_
 - **Walkthrough video:** _TODO_
 
@@ -254,6 +254,22 @@ anyway.
   messages surfaced from the API's `{ code, message }` shape rather than generic failures.
 - **Responsive:** Tailwind utility layout throughout (stacked on narrow viewports, grid on
   wider ones), no fixed-width containers.
+
+## Creative feature: Weak Spots report
+
+Optional, per the brief. `GET /api/kits/:id/weak-spots` (`pipeline/weakSpots.ts`) aggregates
+recorded practice confidence against requirement coverage into a ranked "what to restudy"
+list, surfaced at the end of a practice session. It's deterministic — a data aggregation,
+not a fresh LLM call — reusing exactly the data the app already collects (coverage +
+practice attempts), so it costs nothing extra and can't hallucinate.
+
+**Why this one:** the flashcard stepper and the schedule both treat every requirement as
+equally worth your remaining time, but by the time you've practised for a day or two that's
+no longer true — you already know some of it. The report answers the actual question a
+candidate has mid-prep: "of everything in this kit, what should I spend my next 20 minutes
+on?" Ranking logic: a requirement with **no** practised flashcard yet outranks one with a
+low *known* confidence (you don't know what you don't know), then ascending average
+confidence, then `must`-priority as a tiebreak.
 
 ## Testing
 
