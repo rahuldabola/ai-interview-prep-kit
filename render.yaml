@@ -4,7 +4,9 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
+    # Render sets NODE_ENV=production at build time, which makes a plain `npm install`
+    # skip devDependencies (typescript, @types/*) that this TypeScript build needs.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV

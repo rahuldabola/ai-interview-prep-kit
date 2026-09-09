@@ -7,8 +7,11 @@ question bank, flashcards, and a day-by-day schedule — that you can edit, reor
 practise against.
 
 - **Live app:** https://ai-interview-prep-kit-six.vercel.app
-- **Live API:** _TODO: Render URL_
+- **Live API:** https://ai-interview-prep-kit.onrender.com
 - **Walkthrough video:** _TODO_
+
+> The backend is on Render's free tier, which spins down after inactivity — the first
+> request after a while can take ~50s to wake it up. Refresh if the first load times out.
 
 ## Tech stack
 
@@ -89,12 +92,20 @@ company URLs and in production.)
 
 ### Deployment
 
-- **Frontend:** Vercel, root directory `frontend`, env var `NEXT_PUBLIC_API_URL` pointing at
-  the deployed backend.
-- **Backend:** Render (see `render.yaml`), root directory `backend`, `npm install && npm run
-  build` / `npm start`. Env vars: `MONGODB_URI`, `JWT_SECRET`, `GEMINI_API_KEY`,
-  `CORS_ORIGIN` (the deployed frontend origin), the rest have sane defaults.
-- **Database:** MongoDB Atlas free (M0) cluster.
+- **Frontend:** Vercel (root directory `frontend`), env var `NEXT_PUBLIC_API_URL` pointing at
+  the deployed backend. `NEXT_PUBLIC_*` vars are inlined at build time, so changing it
+  requires a redeploy.
+- **Backend:** Render free web service (see `render.yaml`), root directory `backend`.
+  Build command is `npm install --include=dev && npm run build`, not plain `npm install` —
+  Render sets `NODE_ENV=production` at build time, which makes a plain install skip
+  devDependencies (`typescript`, `@types/*`), breaking the TypeScript build. Start command
+  `npm start`. Env vars: `MONGODB_URI`, `JWT_SECRET` (a real random secret — the app
+  refuses to boot in production with the dev default), `GEMINI_API_KEY`, `CORS_ORIGIN` (the
+  deployed frontend origin, exactly), `NODE_ENV=production`; the rest have sane defaults.
+  Free-tier instances spin down after inactivity — the first request after idle can take
+  ~50s.
+- **Database:** MongoDB Atlas free (M0) cluster, Network Access set to `0.0.0.0/0` since
+  Render's free tier has no fixed outbound IP to allowlist instead.
 
 ## High-level architecture
 
@@ -280,6 +291,9 @@ guard's default-deny behaviour.
 
 ## Known limitations / trade-offs
 
+- The Render free tier spins the backend down after inactivity; the first request after a
+  while can take ~50s while it wakes up. A generation kicked off right after a cold start
+  still works — it just queues behind the wake-up.
 - No separate job queue for generation — acceptable for a single free-tier instance, but a
   server restart mid-generation loses that job (it would need to be resubmitted).
 - The public discussion search is a best-effort heuristic against one key-free search
