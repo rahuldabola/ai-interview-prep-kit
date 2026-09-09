@@ -294,6 +294,13 @@ guard's default-deny behaviour.
 - The Render free tier spins the backend down after inactivity; the first request after a
   while can take ~50s while it wakes up. A generation kicked off right after a cold start
   still works — it just queues behind the wake-up.
+- The crawler parses static HTML only (no headless browser) — a site whose primary
+  navigation is rendered client-side (React/Vue hydration) can hide its careers link from a
+  plain fetch even though a human browsing it would find it in one click. Verified live
+  against gitlab.com: the crawler pulled several real product pages but not the actual
+  careers page, and correctly reported "no hiring process information was found" rather
+  than fabricating one. Adding a headless-browser fallback (Playwright) would close this
+  gap at the cost of materially heavier deploy/runtime requirements.
 - No separate job queue for generation — acceptable for a single free-tier instance, but a
   server restart mid-generation loses that job (it would need to be resubmitted).
 - The public discussion search is a best-effort heuristic against one key-free search
