@@ -20,7 +20,7 @@ practise against.
 | Frontend | Next.js (App Router) + Tailwind CSS + TanStack Query + dnd-kit |
 | Backend | Node.js + Express + TypeScript |
 | Database | MongoDB (Atlas free tier) via Mongoose |
-| Auth | JWT in an httpOnly cookie (bcrypt password hashing) |
+| Auth | JWT in an httpOnly cookie, with a bearer-header fallback for third-party-cookie-blocking browsers (bcrypt password hashing) |
 | LLM | Google Gemini — **`gemini-flash-lite-latest`** (free tier) |
 | Scraping | Custom crawler (`cheerio` for parsing), no headless browser |
 | Validation | `zod`, mirrored on both the wire schema and the Appendix A kit shape |
@@ -237,6 +237,33 @@ re-spending LLM quota.
   explicitly delimited block (`llm/promptSafety.ts`) with an instruction not to follow any
   instruction found inside it, before it reaches a prompt. This is a mitigation, not a
   guarantee, and is documented as such.
+- Standard security headers via `helmet` (HSTS, `nosniff`, `X-Frame-Options`,
+  `no-referrer`). The document-oriented CSP/COEP defaults are off: this service returns
+  JSON to a separate frontend origin and renders no HTML of its own.
+- CORS is an explicit allowlist (`CORS_ORIGIN`), optionally plus `*.vercel.app` preview
+  origins (`CORS_ALLOW_VERCEL_PREVIEWS`). An unlisted origin gets no
+  `Access-Control-Allow-Origin` at all rather than a permissive wildcard.
+- Rate limiting (`middleware/rateLimit.ts`), keyed on the authenticated user and falling
+  back to IP: a blanket ceiling on the API, a tighter window on the credential endpoints
+  (which skips successful requests, so a typo'd login is not punished), and a much tighter
+  hourly cap on kit generation — the one genuinely expensive operation. The IP fallback
+  goes through the library's `ipKeyGenerator`, which buckets IPv6 by /64; a raw IPv6 key
+  would be trivially bypassable, since one client is typically handed a whole /64.
+- The login page only follows a `?next=` value that is an in-app path, so it cannot be used
+  as an open redirect.
+
+### Cross-site session transport
+
+The deployed frontend (Vercel) and API (Render) are on different registrable domains, which
+makes the session cookie a **third-party** cookie. `SameSite=None; Secure` is set correctly,
+but Safari's ITP, Brave, and Chrome's incognito mode block third-party cookies outright — so
+a cookie-only session cannot log in at all for a large share of real visitors. Login and
+register therefore also return the token in the response body; the client keeps a copy and
+sends it as `Authorization: Bearer`, and `middleware/requireAuth.ts` accepts either
+transport (preferring the header, so a stale cookie cannot shadow a fresh sign-in). The
+cookie remains the primary mechanism and is still httpOnly; the mirrored copy in
+`localStorage` is script-readable, which is the accepted cost of the app working at all in
+those browsers.
 
 ## Practice mode ordering (Section 7)
 
@@ -264,7 +291,78 @@ anyway.
   surfaced inline; an empty-kits dashboard state with a direct CTA; structured error
   messages surfaced from the API's `{ code, message }` shape rather than generic failures.
 - **Responsive:** Tailwind utility layout throughout (stacked on narrow viewports, grid on
-  wider ones), no fixed-width containers.
+  wider ones), no fixed-width containers, plus a collapsing nav menu below `md`.
+- **Design tokens, not ad-hoc shades:** `app/globals.css` defines semantic
+  surface/ink/line/brand tokens once and remaps them per theme, so components reference
+  `bg-surface`/`text-ink-muted` rather than hard-coded slate values. Dark mode is driven by
+  a `data-theme` attribute (Tailwind v4 `@custom-variant`) rather than the bare
+  `prefers-color-scheme` query, so the nav's light/dark/system toggle can override the OS —
+  and an inline script in the root layout resolves the theme before first paint, so there is
+  no flash of the wrong theme on load.
+- **Every mutation is acknowledged:** a toast host (`components/Toaster.tsx`, `aria-live`)
+  confirms saves, deletes, regenerations and exports. Regenerating a section that was fully
+  pinned or edited says so explicitly instead of looking broken, and `EditableField` shows a
+  "Saving…" marker while a debounced write is still pending.
+- **Requirement links are readable:** the question/flashcard requirement pickers show the
+  requirement *text*, not the opaque `r1`/`r4` ids they used to. Those links drive the
+  coverage check, so they need to be auditable at a glance.
+- **Destructive actions are confirmed:** deleting a kit goes through a real focusable dialog
+  (Escape, backdrop click, focused confirm button) rather than `window.confirm`; deleting a
+  single question or card uses inline "Delete / Keep" confirmation.
+- **Coverage is always visible:** the builder shows a coverage meter and pass count for
+  every kit, not just a warning banner when something is uncovered — a clean result should
+  also be legible as one.
+- **Practice is keyboard-driven:** Space reveals the answer, `1`–`5` record confidence, and
+  the card advances optimistically rather than pausing on each POST. The end-of-session
+  summary reports the actual ratings from that sitting.
+- **Accessibility:** a skip link as the first tab stop, `aria-live` on the generation
+  progress list and the toast host, labelled icon-only buttons, `aria-pressed` on toggles,
+  a `radiogroup` theme switch, `role="progressbar"` meters with real values, and a
+  `prefers-reduced-motion` block that disables the transitions and entrance animations.
+
+## Handling the free-tier cold start
+
+The API spins down after inactivity, and a cold boot takes ~50s. Left alone, that reads as
+"the app is broken":
+
+- The client pings `/api/health` on load, so the instance is already booting while the user
+  reads the page rather than starting its cold start on their first click.
+- Requests get a 75s timeout and one transparent retry, since a waking instance frequently
+  drops the very first connection.
+- Any request still in flight after 2.5s raises a sticky banner explaining that the server
+  sleeps when idle and this is a one-off — an honest explanation instead of a silent stall.
+
+## Reliability of the generation job
+
+Generation is fire-and-forget on the same Express process (no queue — a documented
+free-tier trade-off). Two failure modes are handled explicitly:
+
+- **Interrupted jobs.** A deploy or restart mid-generation used to leave a kit stuck at
+  `"generating"` forever, with the frontend polling a spinner that would never resolve.
+  `recoverOrphanedGenerations()` runs once at boot: nothing in flight can have survived the
+  previous process, so any kit still marked draft/generating is flipped to `failed` with a
+  retryable code.
+- **Retry.** `POST /api/kits/:id/retry` restarts a failed or interrupted kit, clearing the
+  previous error and progress trail first. It refuses on a `ready` kit, since that would
+  throw away a finished kit and the user's edits to it — the per-section regenerate buttons
+  already cover wanting fresher content.
+
+`SIGTERM`/`SIGINT` drain in-flight requests and close the Mongo connection before exit, so
+a deploy does not drop responses mid-flight or leave abandoned connections on the free-tier
+Atlas cluster.
+
+## Export
+
+`GET /api/kits/:id/export?format=md|json` downloads a finished kit as a self-contained
+Markdown study sheet (default) or the raw Appendix A JSON. The Markdown renderer
+(`export/markdown.ts`) is a pure string transform of the already-validated kit, not a fresh
+LLM call: an export has to reproduce exactly what the user edited and pinned, so there is
+nothing for a model to add. Markdown keeps the backend dependency-free and gives the user
+something they can paste into Notion or a gist and keep editing. Requirement rows report
+per-requirement covered/uncovered status rather than quietly dropping the gaps, and
+schedule days render as checklists. The frontend fetches it as a blob so the download can
+carry the `Authorization` header a plain link cannot (`Content-Disposition` is added to the
+CORS `exposedHeaders`, or every download would be named "export").
 
 ## Creative feature: Weak Spots report
 
@@ -284,10 +382,15 @@ confidence, then `must`-priority as a tiebreak.
 
 ## Testing
 
-`cd backend && npm test` — 20 tests covering schedule allocation (day count, front-loading,
+`cd backend && npm test` — 38 tests covering schedule allocation (day count, front-loading,
 integer minutes, 1-day collapse, over-provisioned buffer days), coverage checking
-(must/nice separation), Appendix A structural + cross-reference validation, and the SSRF
-guard's default-deny behaviour.
+(must/nice separation), Appendix A structural + cross-reference validation, the SSRF guard's
+default-deny behaviour, the weak-spots ranking, Markdown export (section coverage, per-
+requirement covered/uncovered reporting, table-cell escaping, buffer days, empty kits,
+filename slugging), and session-token extraction across both auth transports.
+
+`cd frontend && npm run build` type-checks and builds the app; `npx eslint .` is clean,
+including the React Compiler lint rules that ship with Next 16.
 
 ## Known limitations / trade-offs
 
@@ -301,8 +404,15 @@ guard's default-deny behaviour.
   careers page, and correctly reported "no hiring process information was found" rather
   than fabricating one. Adding a headless-browser fallback (Playwright) would close this
   gap at the cost of materially heavier deploy/runtime requirements.
-- No separate job queue for generation — acceptable for a single free-tier instance, but a
-  server restart mid-generation loses that job (it would need to be resubmitted).
+- No separate job queue for generation — acceptable for a single free-tier instance. A
+  server restart mid-generation still loses that job, but it is now detected at boot and
+  surfaced as a retryable failure with a Retry button, rather than a kit stuck on a
+  spinner forever.
+- The bearer-token fallback keeps a copy of the session token in `localStorage`, which is
+  script-readable. That is a deliberate trade: without it the app cannot sign anyone in on
+  Safari, Brave, or Chrome incognito at all. Hosting both halves on one domain (or putting
+  the API behind a path on the frontend's domain) would make the cookie first-party and let
+  the fallback be dropped entirely.
 - The public discussion search is a best-effort heuristic against one key-free search
   endpoint; it can be blocked or rate-limited by the search provider independently of our
   own retries.
