@@ -17,6 +17,7 @@ export function EditableField({
   ariaLabel,
   className = "",
   placeholder,
+  rows = 3,
 }: {
   value: string;
   onSave: (value: string) => void;
@@ -24,11 +25,15 @@ export function EditableField({
   ariaLabel: string;
   className?: string;
   placeholder?: string;
+  rows?: number;
 }) {
   const [local, setLocal] = useState(value);
   const [prevValue, setPrevValue] = useState(value);
   const [dirty, setDirty] = useState(false);
-  const debouncedSave = useDebouncedCallback(onSave, 700);
+  const debouncedSave = useDebouncedCallback((v: string) => {
+    onSave(v);
+    setDirty(false);
+  }, 700);
 
   // Adjust local state during render when the server value changes underneath us (e.g. a
   // regeneration or refetch) and we have no unsaved local edit — the recommended React
@@ -60,5 +65,19 @@ export function EditableField({
     placeholder,
   };
 
-  return multiline ? <textarea rows={3} {...shared} /> : <input type="text" {...shared} />;
+  return (
+    <div className="relative">
+      {multiline ? <textarea rows={rows} {...shared} /> : <input type="text" {...shared} />}
+      {/* Tells the user their typing has not yet been persisted, so leaving the page
+          immediately after an edit is a visibly informed choice rather than a gamble. */}
+      {dirty && (
+        <span
+          className="pointer-events-none absolute bottom-2 right-2 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-subtle"
+          aria-hidden="true"
+        >
+          Saving…
+        </span>
+      )}
+    </div>
+  );
 }
