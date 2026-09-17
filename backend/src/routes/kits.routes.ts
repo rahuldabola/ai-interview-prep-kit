@@ -17,10 +17,12 @@ import {
   reorderQuestionsSchema,
 } from "../validation/requestSchemas.js";
 import { computeDedupeHash, addFlashcard, addQuestion, deleteFlashcard, deleteQuestion, editCompanyBrief, editFlashcard, editQuestion, editRequirement, reorderQuestions } from "../services/kitService.js";
-import { regenerateSection, startGeneration } from "../services/generationService.js";
+import { regenerateSection, retryGeneration, startGeneration } from "../services/generationService.js";
 import { validateKit } from "../validation/kitSchema.js";
 import { computeWeakSpots } from "../pipeline/weakSpots.js";
 import type { Kit } from "../pipeline/types.js";
+import { generationLimiter } from "../middleware/rateLimit.js";
+import { exportFilename, kitToMarkdown } from "../export/markdown.js";
 
 export const kitsRouter = Router();
 kitsRouter.use(requireAuth);
@@ -54,6 +56,7 @@ kitsRouter.get(
 
 kitsRouter.post(
   "/",
+  generationLimiter,
   validateBody(createKitSchema),
   asyncHandler(async (req, res) => {
     const { jd, company_url, days } = req.body;
@@ -200,5 +203,68 @@ kitsRouter.get(
     }
 
     res.json({ weak_spots: computeWeakSpots(kit, latestConfidence) });
+  })
+);
+
+/**
+ * Restart a generation that failed or was interrupted by a server restart. Deliberately
+ * limited to non-terminal-success states: retrying a "ready" kit would throw away a
+ * finished kit (and the user's edits to it) for no reason, and the builder's per-section
+ * regenerate buttons already cover wanting fresher content.
+ */
+kitsRouter.post(
+  "/:id/retry",
+  generationLimiter,
+  asyncHandler(async (req, res) => {
+    const doc = await loadOwnedKit(req.userId!, req.params.id);
+    if (doc.status === "ready") {
+      throw new HttpError(409, "KIT_ALREADY_READY", "This kit is already built — regenerate a section instead.");
+    }
+    if (doc.status === "generating") {
+      throw new HttpError(409, "KIT_GENERATING", "This kit is already being generated.");
+    }
+    await retryGeneration(req.params.id);
+    res.status(202).json({ id: doc._id, status: "generating" });
+  })
+);
+
+/**
+ * Removing a kit also frees its dedupe hash, so the same JD + company URL can be submitted
+ * again afterwards — otherwise deleting a bad run would permanently block retrying it.
+ */
+kitsRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await KitModel.deleteOne({ _id: req.params.id, userId: req.userId });
+    if (result.deletedCount === 0) throw new HttpError(404, "NOT_FOUND", "Kit not found");
+    res.status(204).send();
+  })
+);
+
+/**
+ * Download a finished kit as Markdown (default) or the raw Appendix A JSON. Sent as an
+ * attachment so the browser saves a sensibly-named file instead of rendering it inline.
+ */
+kitsRouter.get(
+  "/:id/export",
+  asyncHandler(async (req, res) => {
+    const doc = await loadOwnedKit(req.userId!, req.params.id);
+    if (!doc.kit) throw new HttpError(409, "KIT_NOT_READY", "This kit has not finished generating yet");
+    const kit = doc.kit as Kit;
+    const format = String(req.query.format ?? "md").toLowerCase();
+
+    if (format === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${exportFilename(kit, "json")}"`);
+      res.send(JSON.stringify(kit, null, 2));
+      return;
+    }
+    if (format === "md" || format === "markdown") {
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${exportFilename(kit, "md")}"`);
+      res.send(kitToMarkdown(kit));
+      return;
+    }
+    throw new HttpError(400, "INVALID_FORMAT", 'Supported formats are "md" and "json"');
   })
 );
