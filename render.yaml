@@ -29,3 +29,7 @@ services:
         value: "false"
       - key: LLM_MAX_CONCURRENCY
         value: "1"
+      # Lets Vercel preview deployments (*.vercel.app) call this API. Set to "false" to
+      # restrict CORS strictly to the exact origins in CORS_ORIGIN.
+      - key: CORS_ALLOW_VERCEL_PREVIEWS
+        value: "true"

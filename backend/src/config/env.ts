@@ -15,6 +15,12 @@ const envSchema = z.object({
     .default("false")
     .transform((v) => v === "true"),
   LLM_MAX_CONCURRENCY: z.coerce.number().default(1),
+  // Vercel gives every branch/commit its own *.vercel.app hostname. Allowing them keeps
+  // preview deployments usable against this API without redeploying it per branch.
+  CORS_ALLOW_VERCEL_PREVIEWS: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false"),
 });
 
 const parsed = envSchema.safeParse(process.env);

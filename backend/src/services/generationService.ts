@@ -57,6 +57,46 @@ export function startGeneration(kitId: string): void {
   })();
 }
 
+/**
+ * Generation runs in-process with no external queue, so a deploy or a free-tier restart
+ * mid-job kills that job silently and leaves its kit sitting at "generating" forever —
+ * the frontend would poll a spinner that never resolves. Called once at boot: any kit
+ * still marked draft/generating cannot have a live job behind it (nothing survived the
+ * restart), so it is flipped to "failed" with a retryable code that the UI renders as a
+ * "Retry generation" button rather than a dead end.
+ */
+export async function recoverOrphanedGenerations(): Promise<number> {
+  const result = await KitModel.updateMany(
+    { status: { $in: ["draft", "generating"] } },
+    {
+      $set: {
+        status: "failed",
+        error: {
+          code: "GENERATION_INTERRUPTED",
+          message: "The server restarted while this kit was being generated. Press Retry to start it again.",
+        },
+      },
+    }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`Recovered ${result.modifiedCount} interrupted generation job(s) at boot.`);
+  }
+  return result.modifiedCount;
+}
+
+/**
+ * Restarts generation for a kit that failed (or was interrupted by a restart). Clears the
+ * previous error and progress trail first so the UI shows a clean run rather than the old
+ * failure interleaved with the new attempt.
+ */
+export async function retryGeneration(kitId: string): Promise<void> {
+  await KitModel.updateOne(
+    { _id: kitId },
+    { $set: { status: "draft", error: null, progress: [], skipped: [] } }
+  );
+  startGeneration(kitId);
+}
+
 const CATEGORY_GENERATORS: Record<
   QuestionCategory,
   (kit: Kit, makeId: () => string) => Promise<import("../pipeline/types.js").Question[]>
