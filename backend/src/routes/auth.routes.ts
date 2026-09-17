@@ -7,11 +7,13 @@ import { validateBody } from "../middleware/validateBody.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { HttpError } from "../middleware/errorHandler.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { authLimiter } from "../middleware/rateLimit.js";
 
 export const authRouter = Router();
 
 authRouter.post(
   "/register",
+  authLimiter,
   validateBody(registerSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -23,12 +25,15 @@ authRouter.post(
     const user = await User.create({ email, passwordHash });
     const token = issueToken({ userId: user._id.toString() });
     res.cookie(SESSION_COOKIE, token, cookieOptions);
-    res.status(201).json({ user: { id: user._id, email: user.email } });
+    // `token` is also returned in the body so the client can fall back to an
+    // Authorization header when the browser blocks our cross-site session cookie.
+    res.status(201).json({ user: { id: user._id, email: user.email }, token });
   })
 );
 
 authRouter.post(
   "/login",
+  authLimiter,
   validateBody(loginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -42,7 +47,7 @@ authRouter.post(
     }
     const token = issueToken({ userId: user._id.toString() });
     res.cookie(SESSION_COOKIE, token, cookieOptions);
-    res.json({ user: { id: user._id, email: user.email } });
+    res.json({ user: { id: user._id, email: user.email }, token });
   })
 );
 

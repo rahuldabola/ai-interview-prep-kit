@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../apiClient";
+import { setStoredToken } from "../authToken";
 import type { User } from "../types";
 
 export function useCurrentUser() {
@@ -33,17 +34,24 @@ export function useRequireAuth() {
 
 export function useLogin() {
   const qc = useQueryClient();
-  return useMutation<{ user: User }, ApiError, { email: string; password: string }>({
+  return useMutation<{ user: User; token?: string }, ApiError, { email: string; password: string }>({
     mutationFn: (body) => api.post("/api/auth/login", body),
-    onSuccess: (data) => qc.setQueryData(["me"], data),
+    onSuccess: (data) => {
+      // Kept as the fallback transport for browsers that drop our cross-site cookie.
+      setStoredToken(data.token ?? null);
+      qc.setQueryData(["me"], { user: data.user });
+    },
   });
 }
 
 export function useRegister() {
   const qc = useQueryClient();
-  return useMutation<{ user: User }, ApiError, { email: string; password: string }>({
+  return useMutation<{ user: User; token?: string }, ApiError, { email: string; password: string }>({
     mutationFn: (body) => api.post("/api/auth/register", body),
-    onSuccess: (data) => qc.setQueryData(["me"], data),
+    onSuccess: (data) => {
+      setStoredToken(data.token ?? null);
+      qc.setQueryData(["me"], { user: data.user });
+    },
   });
 }
 
@@ -51,6 +59,11 @@ export function useLogout() {
   const qc = useQueryClient();
   return useMutation<void, ApiError, void>({
     mutationFn: () => api.post("/api/auth/logout"),
-    onSuccess: () => qc.setQueryData(["me"], undefined),
+    // Runs on failure too: if the network call fails, the user still asked to sign out, so
+    // the local session must go regardless rather than leaving them apparently signed in.
+    onSettled: () => {
+      setStoredToken(null);
+      qc.clear();
+    },
   });
 }
